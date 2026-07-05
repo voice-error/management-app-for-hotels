@@ -1,0 +1,16 @@
+services:
+  postgres-db:
+    image: postgres:16
+    container_name: randr_project
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: helloworld
+      POSTGRES_DB: randr_main
+      TZ: "Asia/Kathmandu"
+    ports:
+      - "5432:5432"
+    volumes:
+      # This maps your local SQL file into the container. 
+      # Docker will automatically execute this script the first time the container starts.
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped

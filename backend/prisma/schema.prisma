@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model audit_log {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_id    String    @db.VarChar(255)
+  actor_type  String    @default("super_admin") @db.VarChar(20)
+  action      String    @db.VarChar(100)
+  target_type String    @db.VarChar(50)
+  target_id   String    @db.VarChar(255)
+  old_value   Json?
+  new_value   Json?
+  ip_address  String?   @db.VarChar(50)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([target_type, target_id], map: "idx_audit_log_target")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model branch {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id String    @db.Uuid
+  address     String?
+  contact     String?   @db.VarChar(50)
+  status      String    @default("active") @db.VarChar(20)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  business    business  @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([business_id], map: "idx_branch_business_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model business {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_type_id      Int?
+  name                  String                  @db.VarChar(150)
+  address               String?
+  owner_name            String?                 @db.VarChar(100)
+  contact1              String?                 @db.VarChar(50)
+  contact2              String?                 @db.VarChar(50)
+  email                 String?                 @db.VarChar(150)
+  retailer_id           String?                 @db.Uuid
+  verified_by           String?                 @db.Uuid
+  verified_at           DateTime?               @db.Timestamptz(6)
+  status                String                  @default("pending") @db.VarChar(20)
+  is_deleted            Boolean                 @default(false)
+  date_onboarded        DateTime?               @default(now()) @db.Timestamptz(6)
+  date_terminated       DateTime?               @db.Timestamptz(6)
+  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  branch                branch[]
+  business_type         business_type?          @relation(fields: [business_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  retailers             retailers?              @relation(fields: [retailer_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users           super_users?            @relation(fields: [verified_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  business_admin        business_admin[]
+  business_features     business_features[]
+  business_subscription business_subscription[]
+  journal_entries       journal_entries[]
+  platform_invoice      platform_invoice[]
+  platform_payment      platform_payment[]
+  rooms                 room[]
+  reservations          reservation[]
+  menuCategories        menu_category[]
+  menuItems             menu_item[]
+  orders                order[]
+  orderItems            order_item[]
+
+  @@index([is_deleted], map: "idx_business_is_deleted")
+  @@index([status], map: "idx_business_status")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model business_admin {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id       String              @db.Uuid
+  user_name         String              @db.VarChar(100)
+  email             String              @unique @db.VarChar(150)
+  password_hash     String              @db.VarChar(255)
+  created_by        String?             @db.Uuid
+  status            String              @default("active") @db.VarChar(20)
+  created_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  updated_at        DateTime?           @default(now()) @db.Timestamptz(6)
+  business          business            @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users       super_users?        @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  impersonation_log impersonation_log[]
+
+  @@index([business_id], map: "idx_business_admin_business_id")
+}
+
+model business_features {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id String       @db.Uuid
+  feature_id  Int
+  enabled     Boolean      @default(true)
+  enabled_by  String?      @db.Uuid
+  enabled_on  DateTime?    @default(now()) @db.Timestamptz(6)
+  disabled_on DateTime?    @db.Timestamptz(6)
+  business    business     @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users super_users? @relation(fields: [enabled_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  features    features     @relation(fields: [feature_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([business_id, feature_id])
+  @@index([business_id], map: "idx_business_features_business_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model business_subscription {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id          String             @db.Uuid
+  subscription_type_id Int
+  start_date           DateTime           @db.Date
+  end_date             DateTime?          @db.Date
+  auto_renew           Boolean            @default(true)
+  status               String             @default("active") @db.VarChar(20)
+  custom_price         Decimal?           @db.Decimal(10, 2)
+  created_by           String?            @db.Uuid
+  created_at           DateTime?          @default(now()) @db.Timestamptz(6)
+  business             business           @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users          super_users?       @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subscription_type    subscription_type  @relation(fields: [subscription_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  platform_invoice     platform_invoice[]
+
+  @@index([business_id], map: "idx_business_subscription_business_id")
+  @@index([status], map: "idx_business_subscription_status")
+}
+
+model business_type {
+  id       Int        @id @default(autoincrement())
+  name     String     @unique @db.VarChar(50)
+  business business[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model chart_of_accounts {
+  id                  Int                   @id @default(autoincrement())
+  name                String                @db.VarChar(100)
+  type                String                @db.VarChar(20)
+  journal_entry_lines journal_entry_lines[]
+}
+
+model feature_category {
+  id       Int        @id @default(autoincrement())
+  name     String     @db.VarChar(50)
+  features features[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model features {
+  id                    Int                     @id @default(autoincrement())
+  category_id           Int?
+  code                  String                  @unique @db.VarChar(50)
+  name                  String                  @db.VarChar(100)
+  description           String?
+  is_addon              Boolean                 @default(false)
+  status                String                  @default("active") @db.VarChar(20)
+  business_features     business_features[]
+  feature_category      feature_category?       @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subscription_features subscription_features[]
+}
+
+model impersonation_log {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  super_user_id     String         @db.Uuid
+  business_admin_id String         @db.Uuid
+  started_at        DateTime?      @default(now()) @db.Timestamptz(6)
+  ended_at          DateTime?      @db.Timestamptz(6)
+  reason            String?
+  business_admin    business_admin @relation(fields: [business_admin_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users       super_users    @relation(fields: [super_user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model journal_entries {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id         String                @db.Uuid
+  entry_date          DateTime              @db.Date
+  reference           String?               @db.VarChar(100)
+  note                String?
+  created_by          String?               @db.Uuid
+  created_at          DateTime?             @default(now()) @db.Timestamptz(6)
+  business            business              @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users         super_users?          @relation(fields: [created_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  journal_entry_lines journal_entry_lines[]
+
+  @@index([business_id], map: "idx_journal_entries_business_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model journal_entry_lines {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  journal_entry_id  String            @db.Uuid
+  account_id        Int
+  debit             Decimal           @default(0) @db.Decimal(12, 2)
+  credit            Decimal           @default(0) @db.Decimal(12, 2)
+  chart_of_accounts chart_of_accounts @relation(fields: [account_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  journal_entries   journal_entries   @relation(fields: [journal_entry_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([journal_entry_id], map: "idx_journal_entry_lines_entry_id")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model platform_invoice {
+  id                       String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id              String                 @db.Uuid
+  business_subscription_id String?                @db.Uuid
+  invoice_number           String                 @unique @db.VarChar(50)
+  amount                   Decimal                @db.Decimal(10, 2)
+  tax_amount               Decimal                @default(0) @db.Decimal(10, 2)
+  due_date                 DateTime               @db.Date
+  status                   String                 @default("unpaid") @db.VarChar(20)
+  created_at               DateTime?              @default(now()) @db.Timestamptz(6)
+  business                 business               @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  business_subscription    business_subscription? @relation(fields: [business_subscription_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  platform_payment         platform_payment[]
+
+  @@index([business_id], map: "idx_platform_invoice_business_id")
+  @@index([status], map: "idx_platform_invoice_status")
+}
+
+model platform_payment {
+  id                     String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  invoice_id             String           @db.Uuid
+  business_id            String           @db.Uuid
+  amount                 Decimal          @db.Decimal(10, 2)
+  method                 String?          @db.VarChar(30)
+  gateway_transaction_id String?          @db.VarChar(100)
+  gateway_response       Json?
+  paid_on                DateTime?        @default(now()) @db.Timestamptz(6)
+  recorded_by            String?          @db.Uuid
+  business               business         @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  platform_invoice       platform_invoice @relation(fields: [invoice_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  super_users            super_users?     @relation(fields: [recorded_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model retailers {
+  id              String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name            String     @db.VarChar(150)
+  address         String?
+  contact         String?    @db.VarChar(50)
+  email           String?    @db.VarChar(150)
+  commission_rate Decimal?   @default(0) @db.Decimal(5, 2)
+  status          String     @default("active") @db.VarChar(20)
+  created_at      DateTime?  @default(now()) @db.Timestamptz(6)
+  business        business[]
+}
+
+model subscription_features {
+  id                   Int               @id @default(autoincrement())
+  subscription_type_id Int
+  feature_id           Int
+  features             features          @relation(fields: [feature_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  subscription_type    subscription_type @relation(fields: [subscription_type_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([subscription_type_id, feature_id])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model subscription_type {
+  id                    Int                     @id @default(autoincrement())
+  name                  String                  @db.VarChar(100)
+  billing_cycle         String                  @db.VarChar(20)
+  price                 Decimal                 @db.Decimal(10, 2)
+  currency              String                  @default("USD") @db.VarChar(10)
+  status                String                  @default("active") @db.VarChar(20)
+  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  business_subscription business_subscription[]
+  subscription_features subscription_features[]
+}
+
+model super_admin_roles {
+  id          Int           @id @default(autoincrement())
+  name        String        @unique @db.VarChar(50)
+  description String?
+  created_at  DateTime?     @default(now()) @db.Timestamptz(6)
+  super_users super_users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model super_users {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  role_id               Int
+  name                  String                  @db.VarChar(100)
+  email                 String                  @unique @db.VarChar(150)
+  phone                 String?                 @db.VarChar(20)
+  password_hash         String                  @db.VarChar(255)
+  status                String                  @default("active") @db.VarChar(20)
+  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  business              business[]
+  business_admin        business_admin[]
+  business_features     business_features[]
+  business_subscription business_subscription[]
+  impersonation_log     impersonation_log[]
+  journal_entries       journal_entries[]
+  platform_payment      platform_payment[]
+  super_admin_roles     super_admin_roles       @relation(fields: [role_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+// ==========================================
+// HOTEL MANAGEMENT MODULE
+// ==========================================
+
+model room {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id     String    @db.Uuid
+  room_number     String    @db.VarChar(50)
+  type            String    @db.VarChar(50)
+  capacity        Int
+  price_per_night Decimal   @db.Decimal(10, 2)
+  status          String    @default("available") @db.VarChar(20)
+  created_at      DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+
+  business business @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([business_id], map: "idx_room_business_id")
+}
+
+model reservation {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id    String    @db.Uuid
+  guest_name     String    @db.VarChar(150)
+  check_in_date  DateTime  @db.Date
+  check_out_date DateTime  @db.Date
+  total_amount   Decimal   @db.Decimal(10, 2)
+  status         String    @default("pending") @db.VarChar(20)
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
+
+  business business @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([business_id], map: "idx_reservation_business_id")
+}
+
+// ==========================================
+// RESTAURANT POS MODULE
+// ==========================================
+
+model menu_category {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id String    @db.Uuid
+  name        String    @db.VarChar(100)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  business   business    @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  menu_items menu_item[]
+
+  @@index([business_id], map: "idx_menu_category_business_id")
+}
+
+model menu_item {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id String    @db.Uuid
+  category_id String    @db.Uuid
+  name        String    @db.VarChar(150)
+  price       Decimal   @db.Decimal(10, 2)
+  description String?
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  business    business      @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category    menu_category @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order_items order_item[]
+
+  @@index([business_id], map: "idx_menu_item_business_id")
+  @@index([category_id], map: "idx_menu_item_category_id")
+}
+
+model order {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id  String    @db.Uuid
+  table_number String    @db.VarChar(50)
+  total_amount Decimal   @db.Decimal(10, 2)
+  status       String    @default("pending") @db.VarChar(20)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
+
+  business    business     @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order_items order_item[]
+
+  @@index([business_id], map: "idx_order_business_id")
+}
+
+model order_item {
+  id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id            String    @db.Uuid
+  order_id               String    @db.Uuid
+  menu_item_id           String    @db.Uuid
+  quantity               Int
+  price_at_time_of_order Decimal   @db.Decimal(10, 2)
+  created_at             DateTime? @default(now()) @db.Timestamptz(6)
+
+  business  business  @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order     order     @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  menu_item menu_item @relation(fields: [menu_item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([business_id], map: "idx_order_item_business_id")
+  @@index([order_id], map: "idx_order_item_order_id")
+  @@index([menu_item_id], map: "idx_order_item_menu_item_id")
+}
