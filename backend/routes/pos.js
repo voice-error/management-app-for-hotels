@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../db');
+const { resolveBranchId } = require('../utils/branchHelper');
 
 // ==========================================
 // MENU CATALOG
@@ -75,8 +76,9 @@ router.post('/items', async (req, res) => {
 // GET active orders
 router.get('/orders', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const orders = await prisma.order.findMany({
-            where: { business_id: req.userContext.businessId },
+            where: { branch_id: branchId },
             include: { order_items: { include: { menu_item: true } } }
         });
         res.json(orders);
@@ -89,18 +91,18 @@ router.get('/orders', async (req, res) => {
 // POST an order
 router.post('/orders', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         // Expected items format: [{ menu_item_id: "uuid", quantity: 2, price_at_time_of_order: 12.00 }]
         const { table_number, total_amount, status, items } = req.body;
         
         const newOrder = await prisma.order.create({
             data: {
-                business_id: req.userContext.businessId,
+                branch_id: branchId,
                 table_number,
                 total_amount,
                 status: status || 'pending',
                 order_items: {
                     create: items.map(item => ({
-                        business_id: req.userContext.businessId,
                         menu_item_id: item.menu_item_id,
                         quantity: item.quantity,
                         price_at_time_of_order: item.price_at_time_of_order
@@ -119,13 +121,14 @@ router.post('/orders', async (req, res) => {
 // PUT update an order
 router.put('/orders/:id', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { id } = req.params;
         const { status, total_amount, table_number } = req.body;
 
         const updatedOrder = await prisma.order.update({
             where: {
                 id: id,
-                business_id: req.userContext.businessId
+                branch_id: branchId
             },
             data: {
                 status,

@@ -92,33 +92,67 @@ async function main() {
 
     console.log(`✅ Business Admin created or exists: ${businessAdmin.email}`);
     
+    // 4.5 Create a Branch for the first Business
+    let firstBranch = await prisma.branch.findFirst({
+        where: { business_id: firstBusiness.id }
+    });
+    
+    if (!firstBranch) {
+        firstBranch = await prisma.branch.create({
+            data: {
+                business_id: firstBusiness.id,
+                address: '123 Main St',
+                contact: '+1 (555) 123-4567',
+                status: 'active'
+            }
+        });
+        console.log(`✅ First Branch created: ${firstBranch.id}`);
+    } else {
+        console.log(`✅ First Branch already exists: ${firstBranch.id}`);
+    }
+    
     // ==========================================
     // EXTENDED SEEDING: Hotel & POS Modules
     // ==========================================
     console.log('\nCleaning up old dummy module data...');
-    await prisma.order_item.deleteMany({ where: { business_id: firstBusiness.id } });
-    await prisma.order.deleteMany({ where: { business_id: firstBusiness.id } });
-    await prisma.menu_item.deleteMany({ where: { business_id: firstBusiness.id } });
-    await prisma.menu_category.deleteMany({ where: { business_id: firstBusiness.id } });
-    await prisma.reservation.deleteMany({ where: { business_id: firstBusiness.id } });
-    await prisma.room.deleteMany({ where: { business_id: firstBusiness.id } });
+    // We wipe everything (ignoring where clause since we force reset anyway, or use the new keys)
+    await prisma.order_item.deleteMany();
+    await prisma.order.deleteMany();
+    await prisma.menu_item.deleteMany();
+    await prisma.menu_category.deleteMany();
+    await prisma.reservation.deleteMany();
+    await prisma.room.deleteMany();
+    await prisma.room_type.deleteMany();
+    await prisma.branch_staff.deleteMany();
 
-    // 5. Create Hotel Rooms
-    console.log('Creating Hotel Rooms...');
+    // 5. Create Hotel Room Types and Rooms
+    console.log('Creating Hotel Room Types and Rooms...');
+    const singleType = await prisma.room_type.create({
+        data: { business_id: firstBusiness.id, name: 'Standard Single', capacity: 1, base_price: 100.00 }
+    });
+    const doubleType = await prisma.room_type.create({
+        data: { business_id: firstBusiness.id, name: 'Deluxe Double', capacity: 2, base_price: 150.00 }
+    });
+    const suiteType = await prisma.room_type.create({
+        data: { business_id: firstBusiness.id, name: 'Presidential Suite', capacity: 4, base_price: 300.00 }
+    });
+
     await prisma.room.createMany({
         data: [
-            { business_id: firstBusiness.id, room_number: '101', type: 'Single', capacity: 1, price_per_night: 100.00 },
-            { business_id: firstBusiness.id, room_number: '102', type: 'Double', capacity: 2, price_per_night: 150.00 },
-            { business_id: firstBusiness.id, room_number: '201', type: 'Suite', capacity: 4, price_per_night: 300.00 },
+            { branch_id: firstBranch.id, room_number: '101', room_type_id: singleType.id },
+            { branch_id: firstBranch.id, room_number: '102', room_type_id: doubleType.id },
+            { branch_id: firstBranch.id, room_number: '201', room_type_id: suiteType.id },
         ]
     });
+    const createdRoom = await prisma.room.findFirst({ where: { branch_id: firstBranch.id } });
     console.log('✅ Hotel Rooms seeded');
 
     // 6. Create a Reservation
     console.log('Creating Reservations...');
     await prisma.reservation.create({
         data: {
-            business_id: firstBusiness.id,
+            branch_id: firstBranch.id,
+            room_id: createdRoom.id,
             guest_name: 'Alice Johnson',
             check_in_date: new Date('2026-07-10T14:00:00Z'),
             check_out_date: new Date('2026-07-15T11:00:00Z'),
@@ -148,16 +182,30 @@ async function main() {
     // 8. Create POS Order
     console.log('Creating POS Order...');
     const newOrder = await prisma.order.create({
-        data: { business_id: firstBusiness.id, table_number: 'Table 5', total_amount: 15.50, status: 'completed' }
+        data: { branch_id: firstBranch.id, table_number: 'Table 5', total_amount: 15.50, status: 'completed' }
     });
 
     await prisma.order_item.createMany({
         data: [
-            { business_id: firstBusiness.id, order_id: newOrder.id, menu_item_id: coke.id, quantity: 1, price_at_time_of_order: 3.50 },
-            { business_id: firstBusiness.id, order_id: newOrder.id, menu_item_id: burger.id, quantity: 1, price_at_time_of_order: 12.00 }
+            { order_id: newOrder.id, menu_item_id: coke.id, quantity: 1, price_at_time_of_order: 3.50 },
+            { order_id: newOrder.id, menu_item_id: burger.id, quantity: 1, price_at_time_of_order: 12.00 }
         ]
     });
     console.log('✅ POS Order seeded');
+
+    // 9. Create Branch Staff
+    console.log('Creating Branch Staff...');
+    await prisma.branch_staff.create({
+        data: {
+            branch_id: firstBranch.id,
+            name: 'John BranchManager',
+            email: 'john@firsthotel.com',
+            password_hash: await bcrypt.hash('password123', 10),
+            role: 'Branch Manager',
+            status: 'active'
+        }
+    });
+    console.log('✅ Branch Staff seeded');
 
     console.log('\n--- Seed Complete ---');
     console.log('You can now log in via Postman to /api/auth/login using:');

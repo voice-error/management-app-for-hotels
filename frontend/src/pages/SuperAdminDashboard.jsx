@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import KebabMenu from '../components/KebabMenu';
 import './SuperAdminDashboard.css';
 
 const SuperAdminDashboard = () => {
@@ -40,15 +39,23 @@ const SuperAdminDashboard = () => {
   // Derived metrics
   const activeTenantsCount = tenants.length; // In a real app, filter by status
   const pendingCount = tenants.filter(t => t.name.includes('Pending')).length || 0; 
-  // We don't have ARR yet in the DB schema for businesses, so we'll just mock it or omit it.
-
-  const tenantActions = [
-    { label: 'View / Edit Tenant', onClick: (t) => console.log('Edit', t.name) },
-    { label: 'Impersonate (Login As)', onClick: (t) => console.log('Impersonate', t.name) },
-    { label: 'Manage Subscription', onClick: (t) => console.log('Subscription', t.name) },
-    { label: 'Suspend / Deactivate', onClick: (t) => console.log('Suspend', t.name), danger: true },
-    { label: 'Delete Tenant', onClick: (t) => console.log('Delete', t.name), danger: true },
-  ];
+  
+  const mrr = tenants.reduce((acc, t) => {
+      let monthlyCost = 0;
+      if (t.business_subscription && t.business_subscription.length > 0) {
+          const activeSub = t.business_subscription.find(s => s.status === 'active') || t.business_subscription[0];
+          if (activeSub) {
+              const cost = parseFloat(activeSub.custom_price) || (activeSub.subscription_type ? parseFloat(activeSub.subscription_type.price) : 0);
+              const billingCycle = activeSub.subscription_type?.billing_cycle || 'monthly';
+              if (billingCycle === 'monthly') {
+                  monthlyCost = cost;
+              } else if (billingCycle === 'yearly') {
+                  monthlyCost = cost / 12;
+              }
+          }
+      }
+      return acc + monthlyCost;
+  }, 0);
 
   return (
     <div className="dashboard">
@@ -64,9 +71,9 @@ const SuperAdminDashboard = () => {
           <div className="kpi-change positive">Live from DB</div>
         </div>
         <div className="card kpi-card">
-          <div className="kpi-value">N/A</div>
+          <div className="kpi-value">रु{Math.round(mrr).toLocaleString()}</div>
           <div className="label-mono">Monthly Recurring Rev</div>
-          <div className="kpi-change neutral">Pending Subscription Module</div>
+          <div className="kpi-change positive">Live from DB</div>
         </div>
         <div className="card kpi-card">
           <div className="kpi-value">{pendingCount}</div>
@@ -95,7 +102,6 @@ const SuperAdminDashboard = () => {
                   <th>Domain</th>
                   <th>Timezone</th>
                   <th>Status</th>
-                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -110,14 +116,11 @@ const SuperAdminDashboard = () => {
                         ACTIVE
                       </span>
                     </td>
-                    <td>
-                      <KebabMenu actions={tenantActions} tenant={tenant} />
-                    </td>
                   </tr>
                 ))}
                 {tenants.length === 0 && (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '16px' }}>No tenants found.</td>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '16px' }}>No tenants found.</td>
                   </tr>
                 )}
               </tbody>

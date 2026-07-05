@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('../db');
+const { resolveBranchId } = require('../utils/branchHelper');
 
 // ==========================================
 // ROOMS
@@ -9,8 +10,9 @@ const prisma = require('../db');
 // GET all rooms
 router.get('/rooms', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const rooms = await prisma.room.findMany({
-            where: { business_id: req.userContext.businessId }
+            where: { branch_id: branchId }
         });
         res.json(rooms);
     } catch (error) {
@@ -22,11 +24,12 @@ router.get('/rooms', async (req, res) => {
 // POST a new room
 router.post('/rooms', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { room_number, type, capacity, price_per_night, status } = req.body;
         
         const newRoom = await prisma.room.create({
             data: {
-                business_id: req.userContext.businessId,
+                branch_id: branchId,
                 room_number,
                 type,
                 capacity,
@@ -44,13 +47,14 @@ router.post('/rooms', async (req, res) => {
 // PUT update a room
 router.put('/rooms/:id', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { id } = req.params;
         const { room_number, type, capacity, price_per_night, status } = req.body;
 
         const updatedRoom = await prisma.room.update({
             where: { 
                 id: id,
-                business_id: req.userContext.businessId // Ensuring tenant boundary
+                branch_id: branchId // Ensuring tenant boundary
             },
             data: { room_number, type, capacity, price_per_night, status }
         });
@@ -64,11 +68,12 @@ router.put('/rooms/:id', async (req, res) => {
 // DELETE a room
 router.delete('/rooms/:id', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { id } = req.params;
         await prisma.room.delete({
             where: {
                 id: id,
-                business_id: req.userContext.businessId
+                branch_id: branchId
             }
         });
         res.json({ message: 'Room deleted' });
@@ -85,8 +90,9 @@ router.delete('/rooms/:id', async (req, res) => {
 // GET all reservations
 router.get('/reservations', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const reservations = await prisma.reservation.findMany({
-            where: { business_id: req.userContext.businessId }
+            where: { branch_id: branchId }
         });
         res.json(reservations);
     } catch (error) {
@@ -98,11 +104,13 @@ router.get('/reservations', async (req, res) => {
 // POST a reservation
 router.post('/reservations', async (req, res) => {
     try {
-        const { guest_name, check_in_date, check_out_date, total_amount, status } = req.body;
+        const branchId = await resolveBranchId(req);
+        const { room_id, guest_name, check_in_date, check_out_date, total_amount, status } = req.body;
         
         const newReservation = await prisma.reservation.create({
             data: {
-                business_id: req.userContext.businessId,
+                branch_id: branchId,
+                room_id,
                 guest_name,
                 check_in_date: new Date(check_in_date),
                 check_out_date: new Date(check_out_date),
@@ -120,15 +128,17 @@ router.post('/reservations', async (req, res) => {
 // PUT update a reservation
 router.put('/reservations/:id', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { id } = req.params;
-        const { guest_name, check_in_date, check_out_date, total_amount, status } = req.body;
+        const { room_id, guest_name, check_in_date, check_out_date, total_amount, status } = req.body;
 
         const updatedReservation = await prisma.reservation.update({
             where: {
                 id: id,
-                business_id: req.userContext.businessId
+                branch_id: branchId
             },
             data: {
+                room_id,
                 guest_name,
                 check_in_date: check_in_date ? new Date(check_in_date) : undefined,
                 check_out_date: check_out_date ? new Date(check_out_date) : undefined,
@@ -146,11 +156,12 @@ router.put('/reservations/:id', async (req, res) => {
 // DELETE a reservation
 router.delete('/reservations/:id', async (req, res) => {
     try {
+        const branchId = await resolveBranchId(req);
         const { id } = req.params;
         await prisma.reservation.delete({
             where: {
                 id: id,
-                business_id: req.userContext.businessId
+                branch_id: branchId
             }
         });
         res.json({ message: 'Reservation deleted' });

@@ -2,8 +2,12 @@
 const jwt = require('jsonwebtoken');
 
 function requireTenantAuth(req, res, next) {
-    // 1. Check if the cookie exists
-    const token = req.cookies.saas_auth_token;
+    // 1. Check if the token exists in header or cookie
+    let token = req.cookies.saas_auth_token;
+    
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+        token = req.headers.authorization.split(' ')[1];
+    }
 
     if (!token) {
         return res.status(401).json({ error: 'Authentication required' });

@@ -23,13 +23,20 @@ model audit_log {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model branch {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  business_id String    @db.Uuid
-  address     String?
-  contact     String?   @db.VarChar(50)
-  status      String    @default("active") @db.VarChar(20)
-  created_at  DateTime? @default(now()) @db.Timestamptz(6)
-  business    business  @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id           String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id  String         @db.Uuid
+  name         String?        @db.VarChar(100)
+  address      String?
+  contact      String?        @db.VarChar(50)
+  status       String         @default("active") @db.VarChar(20)
+  created_at   DateTime?      @default(now()) @db.Timestamptz(6)
+  business     business       @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rooms             room[]
+  reservations      reservation[]
+  orders            order[]
+  staff             branch_staff[]
+  branch_menu_items branch_menu_items[]
+  branch_room_types branch_room_types[]
 
   @@index([business_id], map: "idx_branch_business_id")
 }
@@ -63,12 +70,9 @@ model business {
   journal_entries       journal_entries[]
   platform_invoice      platform_invoice[]
   platform_payment      platform_payment[]
-  rooms                 room[]
-  reservations          reservation[]
   menuCategories        menu_category[]
   menuItems             menu_item[]
-  orders                order[]
-  orderItems            order_item[]
+  room_types            room_type[]
 
   @@index([is_deleted], map: "idx_business_is_deleted")
   @@index([status], map: "idx_business_status")
@@ -305,25 +309,61 @@ model super_users {
 // HOTEL MANAGEMENT MODULE
 // ==========================================
 
+model room_type {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  business_id String    @db.Uuid
+  name        String    @db.VarChar(100)
+  capacity    Int
+  base_price  Decimal   @db.Decimal(10, 2)
+  description String?
+  status      String    @default("active") @db.VarChar(20)
+  created_at  DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime? @default(now()) @db.Timestamptz(6)
+
+  business          business            @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  rooms             room[]
+  branch_room_types branch_room_types[]
+
+  @@index([business_id], map: "idx_room_type_business_id")
+}
+
 model room {
-  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  business_id     String    @db.Uuid
-  room_number     String    @db.VarChar(50)
-  type            String    @db.VarChar(50)
-  capacity        Int
-  price_per_night Decimal   @db.Decimal(10, 2)
-  status          String    @default("available") @db.VarChar(20)
-  created_at      DateTime? @default(now()) @db.Timestamptz(6)
-  updated_at      DateTime? @default(now()) @db.Timestamptz(6)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branch_id    String    @db.Uuid
+  room_type_id String    @db.Uuid
+  room_number  String    @db.VarChar(50)
+  status       String    @default("available") @db.VarChar(20)
+  created_at   DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at   DateTime? @default(now()) @db.Timestamptz(6)
 
-  business business @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch       branch        @relation(fields: [branch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room_type    room_type     @relation(fields: [room_type_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  reservations reservation[]
 
-  @@index([business_id], map: "idx_room_business_id")
+  @@index([branch_id], map: "idx_room_branch_id")
+  @@index([room_type_id], map: "idx_room_room_type_id")
+}
+
+model branch_staff {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branch_id     String    @db.Uuid
+  name          String    @db.VarChar(100)
+  email         String    @unique @db.VarChar(150)
+  password_hash String    @db.VarChar(255)
+  role          String    @db.VarChar(50)
+  status        String    @default("active") @db.VarChar(20)
+  created_at    DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime? @default(now()) @db.Timestamptz(6)
+
+  branch branch @relation(fields: [branch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([branch_id], map: "idx_branch_staff_branch_id")
 }
 
 model reservation {
   id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  business_id    String    @db.Uuid
+  branch_id      String    @db.Uuid
+  room_id        String    @db.Uuid
   guest_name     String    @db.VarChar(150)
   check_in_date  DateTime  @db.Date
   check_out_date DateTime  @db.Date
@@ -332,9 +372,11 @@ model reservation {
   created_at     DateTime? @default(now()) @db.Timestamptz(6)
   updated_at     DateTime? @default(now()) @db.Timestamptz(6)
 
-  business business @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch branch @relation(fields: [branch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  room   room   @relation(fields: [room_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([business_id], map: "idx_reservation_business_id")
+  @@index([branch_id], map: "idx_reservation_branch_id")
+  @@index([room_id], map: "idx_reservation_room_id")
 }
 
 // ==========================================
@@ -361,12 +403,14 @@ model menu_item {
   name        String    @db.VarChar(150)
   price       Decimal   @db.Decimal(10, 2)
   description String?
+  status      String    @default("active") @db.VarChar(20)
   created_at  DateTime? @default(now()) @db.Timestamptz(6)
   updated_at  DateTime? @default(now()) @db.Timestamptz(6)
 
-  business    business      @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  category    menu_category @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  order_items order_item[]
+  business          business            @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  category          menu_category       @relation(fields: [category_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  order_items       order_item[]
+  branch_menu_items branch_menu_items[]
 
   @@index([business_id], map: "idx_menu_item_business_id")
   @@index([category_id], map: "idx_menu_item_category_id")
@@ -374,33 +418,51 @@ model menu_item {
 
 model order {
   id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  business_id  String    @db.Uuid
+  branch_id    String    @db.Uuid
   table_number String    @db.VarChar(50)
   total_amount Decimal   @db.Decimal(10, 2)
   status       String    @default("pending") @db.VarChar(20)
   created_at   DateTime? @default(now()) @db.Timestamptz(6)
   updated_at   DateTime? @default(now()) @db.Timestamptz(6)
 
-  business    business     @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  branch      branch       @relation(fields: [branch_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   order_items order_item[]
 
-  @@index([business_id], map: "idx_order_business_id")
+  @@index([branch_id], map: "idx_order_branch_id")
 }
 
 model order_item {
   id                     String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  business_id            String    @db.Uuid
   order_id               String    @db.Uuid
   menu_item_id           String    @db.Uuid
   quantity               Int
   price_at_time_of_order Decimal   @db.Decimal(10, 2)
   created_at             DateTime? @default(now()) @db.Timestamptz(6)
 
-  business  business  @relation(fields: [business_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
   order     order     @relation(fields: [order_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
   menu_item menu_item @relation(fields: [menu_item_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  @@index([business_id], map: "idx_order_item_business_id")
   @@index([order_id], map: "idx_order_item_order_id")
   @@index([menu_item_id], map: "idx_order_item_menu_item_id")
+}
+model branch_menu_items {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branch_id    String    @db.Uuid
+  menu_item_id String    @db.Uuid
+  is_available Boolean   @default(true)
+  branch       branch    @relation(fields: [branch_id], references: [id], onDelete: Cascade)
+  menu_item    menu_item @relation(fields: [menu_item_id], references: [id], onDelete: Cascade)
+  
+  @@unique([branch_id, menu_item_id])
+}
+
+model branch_room_types {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  branch_id    String    @db.Uuid
+  room_type_id String    @db.Uuid
+  is_available Boolean   @default(true)
+  branch       branch    @relation(fields: [branch_id], references: [id], onDelete: Cascade)
+  room_type    room_type @relation(fields: [room_type_id], references: [id], onDelete: Cascade)
+
+  @@unique([branch_id, room_type_id])
 }

@@ -33,7 +33,14 @@ const Login = () => {
         if (userRes.ok) {
           const userData = await userRes.json();
           login(userData);
-          navigate('/');
+          
+          if (userData.role === 'SUPER_ADMIN') {
+            navigate('/');
+          } else if (userData.role === 'BUSINESS_ADMIN') {
+            navigate('/business');
+          } else {
+            navigate('/'); // Fallback
+          }
         }
       } else {
         setError(data.error || 'Login failed');

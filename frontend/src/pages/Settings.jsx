@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Settings.css';
 import { Plus, Edit2, Check, X } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const BusinessTypesTable = () => {
   const [data, setData] = useState([]);
@@ -162,7 +163,7 @@ const SubscriptionTypesTable = () => {
               <td>
                 {editingId === item.id ? 
                   <input type="number" className="preset-input" value={editForm.price} onChange={e => setEditForm({...editForm, price: e.target.value})} />
-                : `$${item.price}`}
+                : `रु${item.price}`}
               </td>
               <td>
                 {editingId === item.id ? 
@@ -301,20 +302,31 @@ const RetailersTable = () => {
 
 
 const Settings = () => {
-  const [activeTab, setActiveTab] = useState('general');
+  const { user } = useAuth();
+  // Default tab based on role
+  const [activeTab, setActiveTab] = useState(user?.role === 'SUPER_ADMIN' ? 'general' : 'profile');
 
   return (
     <div className="dashboard">
       <header className="dashboard-header">
-        <h2>Global Settings</h2>
+        <h2>{user?.role === 'SUPER_ADMIN' ? 'Global Settings' : 'Business Settings'}</h2>
         <button className="btn-primary">Save Changes</button>
       </header>
 
       <div className="settings-tabs-container">
-        <button className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`} onClick={() => setActiveTab('general')}>General</button>
-        <button className={`tab-btn ${activeTab === 'security' ? 'active' : ''}`} onClick={() => setActiveTab('security')}>Security & Maintenance</button>
+        {user?.role === 'SUPER_ADMIN' && (
+          <>
+            <button className={`tab-btn ${activeTab === 'general' ? 'active' : ''}`} onClick={() => setActiveTab('general')}>General</button>
+            <button className={`tab-btn ${activeTab === 'maintenance' ? 'active' : ''}`} onClick={() => setActiveTab('maintenance')}>Maintenance</button>
+          </>
+        )}
+        {user?.role === 'BUSINESS_ADMIN' && (
+          <button className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`} onClick={() => setActiveTab('profile')}>Business Profile</button>
+        )}
         <button className={`tab-btn ${activeTab === 'api' ? 'active' : ''}`} onClick={() => setActiveTab('api')}>API Integrations</button>
-        <button className={`tab-btn ${activeTab === 'presets' ? 'active' : ''}`} onClick={() => setActiveTab('presets')}>Preset Data</button>
+        {user?.role === 'SUPER_ADMIN' && (
+          <button className={`tab-btn ${activeTab === 'presets' ? 'active' : ''}`} onClick={() => setActiveTab('presets')}>Preset Data</button>
+        )}
       </div>
 
       <div className="settings-content">
@@ -342,24 +354,38 @@ const Settings = () => {
           </div>
         )}
 
-        {activeTab === 'security' && (
+        {activeTab === 'maintenance' && (
           <div className="settings-grid">
             <section className="card settings-section">
-              <h3>Security & Maintenance</h3>
-              <div className="form-group checkbox-group">
-                <input type="checkbox" id="mfa" defaultChecked />
-                <label htmlFor="mfa" className="fw-500">Enforce Multi-Factor Authentication (MFA) for Super Admins</label>
-              </div>
+              <h3>Maintenance</h3>
               <div className="form-group checkbox-group">
                 <input type="checkbox" id="maintenance" />
                 <label htmlFor="maintenance" className="fw-500 text-danger">Enable Maintenance Mode (Prevents Tenant Logins)</label>
               </div>
+            </section>
+          </div>
+        )}
+
+        {activeTab === 'profile' && (
+          <div className="settings-grid">
+            <section className="card settings-section">
+              <h3>Business Profile</h3>
               <div className="form-group">
-                <label className="label-mono">Password Policy</label>
-                <select className="settings-select">
-                  <option>Strict (12+ chars, special char, number)</option>
-                  <option>Standard (8+ chars)</option>
-                </select>
+                <label className="label-mono">Business Name</label>
+                <input type="text" defaultValue="First Hotel Group" />
+              </div>
+              <div className="form-group">
+                <label className="label-mono">Global Tax Rate (%)</label>
+                <input type="number" step="0.1" defaultValue="13.0" />
+              </div>
+              <div className="form-group">
+                <label className="label-mono">Company Logo</label>
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '8px' }}>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '8px', background: 'var(--color-surface-container-high)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+                    FH
+                  </div>
+                  <button className="btn-ghost">Upload Logo</button>
+                </div>
               </div>
             </section>
           </div>
@@ -368,36 +394,77 @@ const Settings = () => {
         {activeTab === 'api' && (
           <div className="settings-grid">
             <section className="card settings-section">
-              <h3>API Integrations</h3>
+              <h3>{user?.role === 'SUPER_ADMIN' ? 'API Integrations' : 'Fonepay Integration'}</h3>
               
-              <div className="integration-block">
-                <h4>Email / SMTP (SendGrid)</h4>
-                <div className="form-group">
-                  <label className="label-mono">API Key</label>
-                  <input type="password" defaultValue="SG.xxxxxxxxxxxxxxxxxx" />
-                </div>
-              </div>
+              {user?.role === 'SUPER_ADMIN' ? (
+                <>
+                  <div className="integration-block">
+                    <h4>Email / SMTP (SendGrid)</h4>
+                    <div className="form-group">
+                      <label className="label-mono">API Key</label>
+                      <input type="password" defaultValue="SG.xxxxxxxxxxxxxxxxxx" />
+                    </div>
+                  </div>
 
-              <div className="integration-block mt-4">
-                <h4>Billing Integration (Fonepay)</h4>
-                <div className="form-group">
-                  <label className="label-mono">Merchant Code</label>
-                  <input type="password" defaultValue="MERCHANT_XXXXX" />
+                  <div className="integration-block mt-4">
+                    <h4>Billing Integration (Fonepay)</h4>
+                    <div className="form-group">
+                      <label className="label-mono">Merchant Code</label>
+                      <input type="password" defaultValue="MERCHANT_XXXXX" />
+                    </div>
+                    <div className="form-group">
+                      <label className="label-mono">Secret Key</label>
+                      <input type="password" defaultValue="secret_xxxxxxxxxxxxxxxx" />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="integration-block" style={{ textAlign: 'center', padding: '40px 20px' }}>
+                  <div style={{ marginBottom: '24px' }}>
+                    <h4 style={{ fontSize: '24px', marginBottom: '8px', color: '#e51d2a' }}>fonepay</h4>
+                    <p className="text-muted">Link your business account with Fonepay to enable seamless digital payments.</p>
+                  </div>
+                  
+                  <div style={{ maxWidth: '400px', margin: '0 auto', textAlign: 'left' }}>
+                    <div className="form-group">
+                      <label className="label-mono">Fonepay Merchant ID</label>
+                      <input type="text" placeholder="Enter your Merchant ID" />
+                    </div>
+                    <div className="form-group">
+                      <label className="label-mono">Terminal ID (Optional)</label>
+                      <input type="text" placeholder="Enter Terminal ID" />
+                    </div>
+                    <div className="form-group">
+                      <label className="label-mono">Password / Secret Key</label>
+                      <input type="password" placeholder="••••••••" />
+                    </div>
+                    <button className="btn-primary" style={{ width: '100%', background: '#e51d2a', color: 'white', border: 'none' }}>
+                      Connect Fonepay Account
+                    </button>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="label-mono">Secret Key</label>
-                  <input type="password" defaultValue="secret_xxxxxxxxxxxxxxxx" />
-                </div>
-              </div>
+              )}
             </section>
           </div>
         )}
 
         {activeTab === 'presets' && (
           <div className="presets-container">
-            <BusinessTypesTable />
-            <SubscriptionTypesTable />
-            <RetailersTable />
+            {user?.role === 'SUPER_ADMIN' ? (
+              <>
+                <BusinessTypesTable />
+                <SubscriptionTypesTable />
+                <RetailersTable />
+              </>
+            ) : (
+              <div className="card" style={{ padding: '24px' }}>
+                <h3>Business Presets</h3>
+                <p className="text-muted" style={{ marginBottom: '24px' }}>Manage your business-specific key data (e.g., Room Types, Menu Categories, Tax Rates) here.</p>
+                <div style={{ padding: '40px', border: '1px dashed var(--color-outline)', borderRadius: '8px', textAlign: 'center', backgroundColor: 'var(--color-surface-container)' }}>
+                  <span className="label-mono" style={{ color: 'var(--color-on-surface-variant)' }}>Configuration Tables Coming Soon</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

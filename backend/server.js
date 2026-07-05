@@ -9,6 +9,7 @@ const prisma = require('./db');
 
 const hotelRoutes = require('./routes/hotel');
 const posRoutes = require('./routes/pos');
+const businessRoutes = require('./routes/business');
 
 const app = express();
 const cors = require('cors');
@@ -94,7 +95,13 @@ app.get('/api/admin/tenants', requireTenantAuth, async (req, res) => {
         return res.status(403).json({ error: 'Forbidden' });
     }
     try {
-        const tenants = await prisma.business.findMany();
+        const tenants = await prisma.business.findMany({
+            include: {
+                business_subscription: {
+                    include: { subscription_type: true }
+                }
+            }
+        });
         res.json(tenants);
     } catch (error) {
         console.error(error);
@@ -189,6 +196,151 @@ app.post('/api/admin/tenants', requireTenantAuth, async (req, res) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: 'Failed to create tenant' });
+    }
+});
+
+app.put('/api/admin/tenants/:id', requireTenantAuth, async (req, res) => {
+    if (req.userContext.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    
+    const { name, owner_name, email, contact1, contact2, address, business_type_id, password } = req.body;
+    try {
+        const updateData = { name, owner_name, email, contact1, contact2, address };
+        if (business_type_id) {
+            updateData.business_type_id = parseInt(business_type_id, 10);
+        }
+
+        const updatedTenant = await prisma.business.update({
+            where: { id: req.params.id },
+            data: updateData
+        });
+        
+        let passwordChanged = false;
+        if (password) {
+            const password_hash = await bcrypt.hash(password, 10);
+            
+            // Find the first admin for this business to update their password
+            const admin = await prisma.business_admin.findFirst({
+                where: { business_id: req.params.id }
+            });
+
+            if (admin) {
+                await prisma.business_admin.update({
+                    where: { id: admin.id },
+                    data: { password_hash }
+                });
+                passwordChanged = true;
+            }
+        }
+
+        await prisma.audit_log.create({
+            data: {
+                actor_id: `(${req.userContext.userId}) ${req.userContext.name || 'Unknown'}`,
+                actor_type: req.userContext.role,
+                action: 'edit_tenant',
+                target_type: 'business',
+                target_id: req.params.id,
+                new_value: { name, owner_name, email, business_type_id, password_changed: passwordChanged },
+                ip_address: req.ip
+            }
+        });
+
+        res.json(updatedTenant);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to update tenant' });
+    }
+});
+
+app.put('/api/admin/tenants/:id/status', requireTenantAuth, async (req, res) => {
+    if (req.userContext.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    
+    const { status } = req.body; // e.g., 'active' or 'suspended'
+    try {
+        const updatedTenant = await prisma.business.update({
+            where: { id: req.params.id },
+            data: { status }
+        });
+
+        await prisma.audit_log.create({
+            data: {
+                actor_id: `(${req.userContext.userId}) ${req.userContext.name || 'Unknown'}`,
+                actor_type: req.userContext.role,
+                action: 'update_tenant_status',
+                target_type: 'business',
+                target_id: req.params.id,
+                new_value: { status },
+                ip_address: req.ip
+            }
+        });
+
+        res.json(updatedTenant);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to update tenant status' });
+    }
+});
+
+app.put('/api/admin/tenants/:id/subscription', requireTenantAuth, async (req, res) => {
+    if (req.userContext.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+    
+    const { subscription_type_id } = req.body;
+    try {
+        // Find the active subscription for this business
+        const activeSub = await prisma.business_subscription.findFirst({
+            where: { business_id: req.params.id, status: 'active' },
+            orderBy: { created_at: 'desc' }
+        });
+
+        let updatedSub;
+        if (activeSub) {
+            // Update the existing active subscription type
+            const subType = await prisma.subscription_type.findUnique({
+                where: { id: parseInt(subscription_type_id, 10) }
+            });
+
+            updatedSub = await prisma.business_subscription.update({
+                where: { id: activeSub.id },
+                data: {
+                    subscription_type_id: parseInt(subscription_type_id, 10),
+                    custom_price: subType ? subType.price : null
+                }
+            });
+        } else {
+            // Create a new active subscription if none exists
+            const subType = await prisma.subscription_type.findUnique({
+                where: { id: parseInt(subscription_type_id, 10) }
+            });
+
+            const startDate = new Date();
+            updatedSub = await prisma.business_subscription.create({
+                data: {
+                    business_id: req.params.id,
+                    subscription_type_id: parseInt(subscription_type_id, 10),
+                    start_date: startDate,
+                    auto_renew: true,
+                    status: 'active',
+                    custom_price: subType ? subType.price : null,
+                    created_by: req.userContext.userId
+                }
+            });
+        }
+
+        await prisma.audit_log.create({
+            data: {
+                actor_id: `(${req.userContext.userId}) ${req.userContext.name || 'Unknown'}`,
+                actor_type: req.userContext.role,
+                action: 'manage_subscription',
+                target_type: 'business_subscription',
+                target_id: updatedSub.id,
+                new_value: { subscription_type_id },
+                ip_address: req.ip
+            }
+        });
+
+        res.json(updatedSub);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to manage subscription' });
     }
 });
 
@@ -515,6 +667,10 @@ app.post('/api/admin/tenants/:id/renew', requireTenantAuth, async (req, res) => 
         res.status(500).json({ error: 'Failed to renew subscription' });
     }
 });
+
+app.use('/api/business', requireTenantAuth, businessRoutes);
+app.use('/api/hotel', requireTenantAuth, hotelRoutes);
+app.use('/api/pos', requireTenantAuth, posRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
